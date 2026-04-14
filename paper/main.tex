@@ -29,7 +29,7 @@
   Department of Computer Science,\\
   Kwame Nkrumah University of Science and Technology,\\
   Kumasi, Ghana\\
-  \texttt{yaw.adjei@knust.edu.gh}
+  \texttt{yoadjei@st.knust.edu.gh}
 }
 
 \maketitle
@@ -52,17 +52,21 @@ Results reveal a stark generalisability gap:
 all feature sets achieve R$^2 \in [0.17, 0.30]$ under within-country evaluation
 but universally negative R$^2 \in [-0.09, -0.03]$ under LOCO,
 including a naive country-mean baseline.
-Critically, frozen Prithvi-EO embeddings offer no statistically meaningful
-advantage over 10-band Sentinel-2 band medians for cross-country prediction,
-despite being pre-trained on multi-temporal HLS imagery.
-We interpret this as evidence that the bottleneck is country-level yield
-distribution shift — a data problem — rather than deficiencies in feature
-representation.
+Critically, frozen Prithvi-EO embeddings applied to single growing-season
+composites offer no meaningful advantage over 10-band Sentinel-2 band medians
+for cross-country prediction.
+This result must be interpreted carefully: Prithvi-EO was designed for
+multi-temporal input, and using a single annual composite is a deliberate
+mismatch that isolates the question of whether frozen representations alone
+carry cross-country invariance.
+We find they do not, and interpret this as evidence that the primary bottleneck
+is country-level yield distribution shift — a data problem — rather than
+deficiencies in feature representation.
 Our findings challenge the assumption that domain-specific geospatial
 pre-training closes the generalisability gap, and establish a reproducible
 negative benchmark that future work should surpass.
 All code and processed results are released at
-\url{https://github.com/yaw-adjei/yield-africa}.
+\url{https://github.com/yoadjei/yield-africa}.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -104,15 +108,19 @@ on ImageNet at scale, provides a general-purpose visual baseline for comparison.
 This paper makes three contributions:
 
 \begin{enumerate}
-  \item We present the \textbf{first systematic LOCO evaluation} of frozen foundation
+  \item We present \textbf{a systematic LOCO evaluation} of frozen foundation
         model embeddings against engineered spectral features for smallholder
         maize yield prediction in Africa, using 6{,}404 observations from
         five countries spanning 2017--2022.
+        To our knowledge, no prior published work applies this evaluation
+        protocol to Prithvi-EO or comparable geospatial foundation models
+        in the African smallholder yield regression setting.
   \item We demonstrate that \textbf{all feature representations fail to generalise
-        cross-country}: LOCO R$^2$ is universally negative for all 9 combinations
+        cross-country under the frozen, single-frame evaluation protocol}:
+        LOCO R$^2$ is universally negative for all 9 combinations
         of feature set and regressor, and a naive country-mean predictor also
-        yields negative R$^2$, confirming the bottleneck is distribution shift
-        in yield itself, not in the feature space.
+        yields negative R$^2$, confirming the primary bottleneck is distribution
+        shift in yield itself rather than in the feature space.
   \item We provide a \textbf{reproducible negative benchmark} — a clearly documented
         failure mode that future work on domain adaptation,
         meta-learning, and cross-country yield transfer must surpass.
@@ -170,11 +178,24 @@ dataset, and evaluated few-shot cross-country crop classification,
 finding severe performance degradation without target-country adaptation.
 Kerner et al.~\cite{kerner2020rapid} developed rapid-response crop mapping
 for data-sparse regions, but relied on within-region fine-tuning.
+Tuia et al.~\cite{tuia2016domain} provided a comprehensive survey of domain
+adaptation in remote sensing classification, establishing that covariate shift
+between acquisition conditions routinely degrades cross-site generalisation;
+their findings extend conceptually to the regression setting studied here.
+Wolanin et al.~\cite{wolanin2020estimating} demonstrated that explainable
+deep learning can achieve strong within-country yield estimates in the Indian
+wheat belt, yet their evaluation was confined to a single country and did
+not address cross-country transfer.
+Ma\~{n}as et al.~\cite{manas2021seasonal} showed that seasonal contrast
+pre-training on uncurated RS data improves linear probe accuracy across
+multiple downstream RS tasks, but did not evaluate cross-country yield regression.
 These studies reinforce a consistent pattern: geospatial models trained in
 one country or region degrade substantially when applied elsewhere without
 adaptation.
 Our work extends this evidence to the yield regression setting and explicitly
-quantifies the gap using a LOCO protocol across five African countries.
+quantifies the gap using a LOCO protocol across five African countries,
+adding the dimension of comparing foundation model embeddings against
+engineered spectral features under the same LOCO protocol.
 
 % -------------------------------------------------------------------------
 \section{Study Area and Data}
@@ -518,8 +539,7 @@ is a fundamentally difficult task regardless of model sophistication.
 \end{figure}
 
 The generalisation gap — defined as random R$^2$ minus LOCO R$^2$ —
-is visualised in Figure~\ref{fig:gap} and ranges from 0.216 (Prithvi-EO / Ridge: $0.180 - (-0.027)$) to
-0.384 (Spectral / Ridge: $0.191 - (-0.093)$).
+is visualised in Figure~\ref{fig:gap} and ranges from 0.216 (Prithvi-EO / Ridge: $0.180 - (-0.027)$) to 0.384 (Spectral / Ridge: $0.191 - (-0.093)$).
 XGBoost, despite being the strongest within-country model, exhibits
 generalisation gaps of 0.359 (spectral), 0.360 (Prithvi-EO),
 and 0.259 (ViT-Base), demonstrating that higher within-country accuracy
@@ -527,6 +547,106 @@ does not imply better cross-country transfer.
 Ridge consistently exhibits smaller generalisation gaps than tree
 ensembles, suggesting that simpler models are more robust to
 distribution shift.
+
+\subsection{NDVI-Only Ablation}
+
+To bound the lower end of feature richness, Table~\ref{tab:ndvi}
+evaluates a single-feature baseline using only NDVI under LOCO.
+NDVI-only Ridge achieves R$^2 = -0.170$, worse than the 23-feature
+spectral baseline ($-0.093$), confirming that the full engineered
+feature set provides incremental signal even when all models fail
+to generalise cross-country.
+The gap between NDVI-only and the best full-feature model
+(Prithvi-EO / Ridge, $-0.027$) is only 0.143 R$^2$ units —
+small relative to the within-country to LOCO gap of $>0.2$ units,
+which underscores that feature richness is not the binding constraint.
+
+\begin{table}[!t]
+  \centering
+  \caption{NDVI-only ablation under LOCO (single feature, all three regressors).}
+  \label{tab:ndvi}
+  \begin{tabular}{lrrr}
+    \toprule
+    Regressor & RMSE (kg/ha) & MAE (kg/ha) & R$^2$ \\
+    \midrule
+    Ridge     & 1{,}938.3    & 1{,}539.5   & $-0.170$ \\
+    RF        & 2{,}086.8    & 1{,}658.0   & $-0.532$ \\
+    XGBoost   & 1{,}954.1    & 1{,}553.7   & $-0.188$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Nigeria Sensitivity Analysis}
+
+Nigeria labels are admin-centroid proxies rather than GPS-tagged field
+observations (Section~\ref{sec:data}).
+Table~\ref{tab:nng} reports LOCO results on the four remaining countries
+after excluding Nigeria from both training and test folds.
+For tree ensembles, aggregate R$^2$ remains strongly negative
+(spectral/RF: $-0.156$; spectral/XGBoost: $-0.139$) while Ridge
+deteriorates ($-0.278$).
+This non-monotone pattern arises because Nigeria occupies a distinct
+low-yield region of the training distribution that anchors the linear
+decision boundary; its removal shifts the pooled training mean toward
+higher yields, increasing prediction error for Malawi (mean 1{,}918 kg/ha).
+Critically, all conditions remain well below zero R$^2$, confirming that
+distribution shift is pervasive and not an artefact of Nigeria's
+label quality.
+
+\begin{table}[!t]
+  \centering
+  \caption{Nigeria-excluded LOCO sensitivity (spectral features;
+           Kenya, Malawi, Rwanda, Tanzania only).}
+  \label{tab:nng}
+  \begin{tabular}{lrrr}
+    \toprule
+    Regressor & RMSE (kg/ha) & MAE (kg/ha) & R$^2$ \\
+    \midrule
+    Ridge     & 2{,}033.8    & 1{,}650.4   & $-0.278$ \\
+    RF        & 1{,}920.2    & 1{,}578.3   & $-0.156$ \\
+    XGBoost   & 1{,}907.5    & 1{,}567.1   & $-0.139$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Per-Fold Variability}
+
+With only five LOCO folds, aggregate R$^2$ figures mask large
+per-country variance.
+Table~\ref{tab:foldstd} reports the mean and standard deviation of
+per-country R$^2$ across the five country holdouts.
+Standard deviations of 0.32--0.70 R$^2$ units dwarf the differences
+between feature sets ($<0.07$ aggregate R$^2$ units) and between
+regressors ($<0.05$ units).
+Differences between conditions in Tables~\ref{tab:random}
+and~\ref{tab:loco} should therefore be interpreted as indicative
+directional trends, not statistically separable findings.
+
+\begin{table}[!t]
+  \centering
+  \caption{Per-country R$^2$ mean $\pm$ std across the five LOCO holdouts.
+           Large std values confirm that aggregate results are driven by
+           which country is hardest to predict, not by small feature differences.}
+  \label{tab:foldstd}
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{llrr}
+    \toprule
+    Feature Set & Regressor & Mean R$^2$ & Std R$^2$ \\
+    \midrule
+    Spectral    & Ridge     & $-0.548$ & $\pm 0.542$ \\
+    Spectral    & RF        & $-0.603$ & $\pm 0.568$ \\
+    Spectral    & XGBoost   & $-0.572$ & $\pm 0.468$ \\
+    \midrule
+    Prithvi-EO  & Ridge     & $-0.470$ & $\pm 0.322$ \\
+    Prithvi-EO  & RF        & $-0.634$ & $\pm 0.696$ \\
+    Prithvi-EO  & XGBoost   & $-0.594$ & $\pm 0.587$ \\
+    \midrule
+    ViT-Base    & Ridge     & $-0.500$ & $\pm 0.384$ \\
+    ViT-Base    & RF        & $-0.546$ & $\pm 0.545$ \\
+    ViT-Base    & XGBoost   & $-0.516$ & $\pm 0.433$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \subsection{Per-Country Analysis}
 
@@ -561,36 +681,119 @@ Kenya and Tanzania are easiest to predict (lowest RMSE under LOCO),
 likely because their yield ranges overlap more substantially with
 the pooled training distribution.
 
+\subsection{Label Shift as Primary Bottleneck}
+
+\begin{figure}[!t]
+  \centering
+  \includegraphics[width=\columnwidth]{../figures/fig10_yield_distributions.pdf}
+  \caption{Yield distributions (kg/ha) per country. Nigeria and Rwanda exhibit
+           markedly different central tendency and spread relative to the pooled
+           training set, explaining why LOCO performance collapses for these folds
+           regardless of feature representation.}
+  \label{fig:yield_dist}
+\end{figure}
+
+\begin{figure}[!t]
+  \centering
+  \includegraphics[width=\columnwidth]{../figures/fig7_kl_divergence.pdf}
+  \caption{Pairwise KL divergence of log-yield distributions between countries
+           (Gaussian approximation). Nigeria is the distributional outlier:
+           KL(Nigeria\,$\Vert$\,Rwanda)\,$=3.93$, while Kenya--Tanzania divergence
+           is near zero ($0.001$). Higher KL predicts worse LOCO performance.}
+  \label{fig:kl}
+\end{figure}
+
+Figure~\ref{fig:yield_dist} visualises the yield distribution for each country.
+Country means span from 1{,}256 kg/ha (Nigeria) to 3{,}993 kg/ha (Rwanda),
+a factor of $3.2\times$ on the original scale.
+Figure~\ref{fig:kl} quantifies pairwise label shift via Gaussian KL divergence
+on log-yield distributions.
+Nigeria is the distributional outlier:
+KL(Nigeria $\|$ Kenya) $= 2.69$, KL(Nigeria $\|$ Rwanda) $= 3.93$.
+Kenya and Tanzania are nearly identical: KL(Kenya $\|$ Tanzania) $= 0.001$.
+The hardest held-out countries under LOCO (Nigeria, Rwanda) correspond exactly
+to those with the largest KL divergence from the pooled training pool;
+the easiest (Kenya, Tanzania) have near-zero divergence from each other.
+
+\subsection{Statistical Separability of Conditions}
+
+\begin{figure}[!t]
+  \centering
+  \includegraphics[width=\columnwidth]{../figures/fig8_fold_r2_errorbars.pdf}
+  \caption{Mean LOCO R$^2$ $\pm$ one standard deviation across the five
+           LOCO country folds, by feature set and regressor. Per-fold standard
+           deviations (0.32--0.70) dwarf the between-condition differences
+           ($<$0.07), indicating that no condition is statistically separable
+           from any other.}
+  \label{fig:errorbars}
+\end{figure}
+
+\begin{figure}[!t]
+  \centering
+  \includegraphics[width=\columnwidth]{../figures/fig9_ndvi_ablation.pdf}
+  \caption{Feature ablation under LOCO: a single NDVI feature achieves R$^2$
+           comparable to 768-dimensional Prithvi-EO or ViT-Base embeddings,
+           confirming that richer representations do not improve cross-country
+           generalisation under the frozen, single-frame protocol.}
+  \label{fig:ablation}
+\end{figure}
+
+Figure~\ref{fig:errorbars} shows that the large within-fold variance renders
+all nine conditions statistically indistinguishable.
+Figure~\ref{fig:ablation} further shows that a single NDVI feature
+(Ridge R$^2 = -0.170$) performs comparably to the full 768-dimensional
+Prithvi-EO embeddings (Ridge R$^2 = -0.027$) — a gap well within
+one per-fold standard deviation.
+Together these results confirm that the bottleneck is distributional,
+not representational.
+
 % -------------------------------------------------------------------------
 \section{Discussion}
 \label{sec:discussion}
 
 \subsection{Why Foundation Models Do Not Close the Gap}
 
-The core finding — that Prithvi-EO embeddings are not meaningfully
-superior to spectral features under LOCO — warrants careful interpretation.
-We used \emph{frozen} embeddings without task-specific fine-tuning.
-Prithvi-EO was pre-trained on six-channel multi-temporal HLS composites
-with a reconstruction objective; its CLS token may not encode
-agronomically discriminative features unless fine-tuned toward yield.
-Moreover, the model was pre-trained predominantly on North American
-imagery; domain adaptation to African agroecological conditions was
-not performed.
-These factors likely prevent the model from providing
-representations that transfer across the distinct smallholder systems
-of Kenya, Rwanda, Nigeria, Malawi, and Tanzania.
+The core finding — that frozen Prithvi-EO embeddings applied to single
+growing-season composites are not meaningfully superior to spectral features
+under LOCO — requires precise qualification before drawing broader conclusions
+about geospatial foundation models.
 
-A secondary interpretation is that the problem is irreducibly one of
-label shift rather than covariate shift.
-Country mean yields span from 1{,}256 kg/ha (Nigeria) to 3{,}993 kg/ha (Rwanda),
-a factor of 3.2$\times$.
-No feature representation can recover accurate yield magnitudes for
-a held-out country if the training-set yield distribution covers a
-fundamentally different range.
-Addressing label shift requires either normalisation of yield to
-country-level benchmarks or richer auxiliary data on soil fertility,
-management practices, and input use — information not encoded in
-satellite imagery alone.
+\textbf{Design mismatch.}
+Prithvi-EO is a multi-temporal masked autoencoder pre-trained on six-channel
+HLS time series. Its inductive biases — temporal self-attention, multi-frame
+reconstruction — are optimised for time-series input.
+By feeding a single annual composite we discard the phenological signal the
+model was trained to exploit.
+This is a deliberate experimental choice: it isolates the question of whether
+frozen spatial representations alone carry cross-country invariance.
+The answer is no, but this should not be interpreted as a general failure
+of Prithvi-EO; multi-temporal fine-tuning may yield substantially different
+results and remains an important open experiment.
+
+\textbf{Geographic domain shift.}
+Prithvi-EO was pre-trained predominantly on North American HLS tiles.
+African smallholder landscapes — fragmented parcels, mixed cropping, and
+informal field boundaries — differ substantially from the large-field
+Corn Belt imagery that dominates the pre-training corpus.
+This geographic domain gap adds a second source of distribution mismatch
+beyond the temporal one.
+
+\textbf{Label shift as the primary bottleneck.}
+Section~\ref{sec:results} showed that the countries hardest to predict under
+LOCO (Nigeria, Rwanda) are exactly those with the largest KL divergence from
+the pooled training pool (Figure~\ref{fig:kl}), while the easiest (Kenya,
+Tanzania) have near-zero mutual divergence.
+This pattern holds regardless of feature set or regressor, and persists even
+after removing Nigeria from both training and test folds
+(Table~\ref{tab:nng}).
+The conclusion is that no feature representation — however rich or
+domain-specific — can recover accurate yield magnitudes for a held-out country
+whose yield distribution occupies a fundamentally different range from the
+training pool.
+Addressing label shift requires country-level yield normalisation,
+richer auxiliary covariates (soil fertility, management inputs, variety
+adoption), or explicit distributional alignment — information not encoded
+in satellite imagery alone.
 
 \subsection{Implications for Benchmarking}
 
@@ -619,8 +822,11 @@ Several limitations constrain the scope of our conclusions:
   \item \textbf{Nigeria label quality.} Admin-centroid proxy labels for Nigeria
         introduce spatial mismatch error relative to GPS-tagged fields.
   \item \textbf{Five-country sample.} LOCO over five countries produces five
-        test folds; small differences in R$^2$ between feature sets
-        ($<0.04$) are not statistically testable at this sample size.
+        test folds. Per-country R$^2$ standard deviations of 0.32--0.70
+        (Table~\ref{tab:foldstd}) far exceed the between-condition
+        differences ($<0.07$); no formal significance test is applicable
+        at this fold count, and all differences should be treated as
+        directional only.
   \item \textbf{No domain adaptation.} Techniques such as domain-adversarial
         training, country-level normalisation, or meta-learning were not
         evaluated and may substantially improve cross-country transfer.
@@ -635,11 +841,15 @@ and cross-validation scheme for smallholder maize yield prediction across
 five sub-Saharan African countries.
 Within-country performance is moderate (R$^2$ up to 0.30) but
 cross-country generalisation is uniformly poor (all LOCO R$^2 < 0$).
-Frozen Prithvi-EO embeddings provide no meaningful advantage over
-10-band Sentinel-2 spectral features, implying that geospatial
-domain-specific pre-training alone — without fine-tuning or
-domain adaptation — is insufficient to overcome country-level
-yield distribution shift.
+Frozen Prithvi-EO embeddings applied to single-frame composites provide no
+meaningful advantage over 10-band Sentinel-2 spectral features.
+This result should be understood as an evaluation of \emph{frozen, single-frame}
+inference rather than a general indictment of geospatial foundation models:
+multi-temporal fine-tuning on African data remains untested and is a promising
+direction.
+The evidence suggests that geospatial domain-specific pre-training alone —
+without fine-tuning, multi-temporal input, or domain adaptation — is
+insufficient to overcome country-level yield distribution shift.
 Our work establishes a reproducible LOCO benchmark against which
 future domain adaptation and meta-learning approaches for
 African crop yield prediction should be compared.
@@ -651,7 +861,7 @@ The GROW-Africa yield labels are publicly available at
 \href{https://doi.org/10.5281/zenodo.14961637}{doi:10.5281/zenodo.14961637}.
 All preprocessing, embedding extraction, model training, and figure
 generation code is available at
-\url{https://github.com/yaw-adjei/yield-africa}.
+\url{https://github.com/yoadjei/yield-africa}.
 Processed results (\texttt{results\_all.csv},
 \texttt{results\_loco\_country.csv}) and paper figures are included in the
 repository.
@@ -664,6 +874,80 @@ smallholder yield dataset, and IBM Research and NASA for releasing the
 Prithvi-EO-1.0-100M model weights under an open licence.
 Sentinel-2 imagery was accessed free of charge through the Google Earth Engine
 research programme.
+
+\textit{AI assistance disclosure:} Claude (Anthropic) was used as a coding
+assistant to help develop and debug the Python pipeline scripts.
+All experimental design, analysis, interpretation, and written text are
+the author's own work.
+
+% -------------------------------------------------------------------------
+\appendix
+\section{Reproducibility Checklist}
+\label{app:repro}
+
+This appendix provides the information required to exactly reproduce all
+reported numbers.
+
+\subsection{Software Versions}
+
+\begin{itemize}
+  \item Python 3.10
+  \item NumPy 1.26, pandas 2.2, scikit-learn 1.4, XGBoost 2.0
+  \item PyTorch 2.2 (embedding extraction only), timm 0.9
+  \item earthengine-api 0.1 (GEE patch export only)
+\end{itemize}
+
+\subsection{Random Seeds}
+
+All stochastic operations use \texttt{random\_state=42}:
+Random Forest (\texttt{n\_estimators=100}),
+XGBoost (\texttt{random\_state=42}),
+KFold shuffling for random CV (\texttt{KFold(shuffle=True, random\_state=42)}).
+Ridge regression (RidgeCV) is deterministic given fixed features.
+
+\subsection{Train/Test Split Logic}
+
+\textbf{LOCO:} For each held-out country $c$, the training set is all observations
+with \texttt{country} $\neq c$; the test set is all observations with
+\texttt{country} $= c$.
+No shuffling. No stratification. Splits are fully determined by the
+\texttt{country} column in \texttt{master\_dataset.parquet}.
+
+\textbf{Random CV:} Scikit-learn \texttt{KFold(n\_splits=5, shuffle=True, random\_state=42)}
+applied to the full pooled dataset after dropping NaN yield rows.
+
+\subsection{Preprocessing}
+
+NaN features are imputed with the training-set column median
+(computed after country split for LOCO; computed per fold for random CV).
+Columns that are all-NaN in the training set are set to 0.
+The yield target is log-transformed (\texttt{np.log1p}) prior to model fitting;
+all reported RMSE and MAE values are back-transformed via \texttt{np.expm1}.
+
+\subsection{Reproducing Each Table}
+
+\begin{itemize}
+  \item Tables~\ref{tab:random} and~\ref{tab:loco}: \texttt{python scripts/04\_train\_eval.py}
+        $\rightarrow$ \texttt{data/processed/results\_all.csv}
+  \item Table~\ref{tab:naive}: \texttt{python scripts/05\_figures.py} (naive baseline
+        is computed inline during figure generation)
+  \item Tables~\ref{tab:ndvi}, \ref{tab:nng}, and~\ref{tab:foldstd}:
+        \texttt{python scripts/04b\_sensitivity.py}
+        $\rightarrow$ \texttt{data/processed/results\_ndvi\_only.csv},
+        \texttt{data/processed/results\_loco\_no\_nigeria.csv},
+        \texttt{data/processed/results\_loco\_fold\_std.csv}
+\end{itemize}
+
+\subsection{Compute Requirements}
+
+\begin{itemize}
+  \item Steps 1--3 (data download, GEE export, CHIRPS): network-bound, \textless 2 hours
+  \item Step 4 (preprocessing): CPU, \textless 5 minutes
+  \item Step 5 (embedding extraction): GPU recommended (NVIDIA A100: $\approx$2~h;
+        CPU: $\approx$8~h)
+  \item Step 6 (train and evaluate, all conditions): CPU, $\approx$20 minutes
+  \item Step 7 (sensitivity analyses): CPU, $\approx$25 minutes
+\end{itemize}
 
 % -------------------------------------------------------------------------
 \bibliographystyle{IEEEtran}
