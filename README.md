@@ -48,7 +48,7 @@ yield_africa/
 If you only want to reproduce the figures from the pre-computed results:
 
 ```bash
-git clone https://github.com/yaw-adjei/yield-africa.git
+git clone https://github.com/yoadjei/yield-africa.git
 cd yield-africa
 python -m venv env && source env/bin/activate   # Windows: env\Scripts\activate
 pip install -r requirements.txt
