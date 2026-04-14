@@ -1,0 +1,4 @@
+feature,model,cv,rmse,mae,r2
+ndvi_only,ridge,loco,1974.2552,1614.0962,-0.1701
+ndvi_only,rf,loco,2259.1738,1813.5576,-0.5322
+ndvi_only,xgb,loco,1989.2523,1616.1293,-0.1879

@@ -48,7 +48,7 @@ yield_africa/
 If you only want to reproduce the figures from the pre-computed results:
 
 ```bash
-git clone https://github.com/yaw-adjei/yield-africa.git
+git clone https://github.com/yoadjei/yield-africa.git
 cd yield-africa
 python -m venv env && source env/bin/activate   # Windows: env\Scripts\activate
 pip install -r requirements.txt
@@ -216,7 +216,7 @@ The following files are tracked in git and allow figure reproduction without re-
   author  = {Adjei, Yaw Osei},
   title   = {Do Foundation Model Embeddings Improve Cross-Country Crop Yield Generalisation?
              A Leave-One-Country-Out Evaluation in Sub-Saharan Africa},
-  year    = {2025},
+  year    = {2026},
   journal = {under review}
 }
 ```

@@ -8,6 +8,8 @@ Figures produced:
   fig4_generalization_gap.pdf   — generalization gap (random R² − LOCO R²) per condition
   fig5_naive_baseline.pdf       — model RMSE vs naive mean-predictor RMSE per country
   fig6_pred_vs_actual.pdf       — predicted vs actual scatter, best condition (prithvi/ridge/loco)
+  fig7_kl_divergence.pdf        — pairwise KL divergence heatmap on log-yield distributions
+  fig8_fold_r2_errorbars.pdf    — per-fold R² mean ± std by feature set and model
 
 Run:
     python scripts/05_figures.py
@@ -19,7 +21,7 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
+
 import seaborn as sns
 from pathlib import Path
 from sklearn.linear_model import RidgeCV
@@ -35,10 +37,11 @@ FIGS = ROOT / "figures"
 FIGS.mkdir(exist_ok=True)
 
 PALETTE = {
-    "spectral": "#4C72B0",
-    "prithvi":  "#DD8452",
-    "vit":      "#55A868",
+    "spectral": "#1f77b4",   # vivid blue
+    "prithvi":  "#e84545",   # vivid red-orange
+    "vit":      "#2ca02c",   # vivid green
 }
+MODEL_COLORS = ["#1f77b4", "#ff7f0e", "#9467bd"]   # blue / orange / purple
 MODEL_ORDER   = ["ridge", "rf", "xgb"]
 FEATURE_ORDER = ["spectral", "prithvi", "vit"]
 MODEL_LABELS  = {"ridge": "Ridge", "rf": "Random Forest", "xgb": "XGBoost"}
@@ -132,7 +135,7 @@ def fig2_random_vs_loco(results: pd.DataFrame):
 
     for mi, model in enumerate(MODEL_ORDER):
         sub = df[df["model"] == model].set_index("feature").loc[FEATURE_ORDER]
-        col = plt.cm.tab10(mi / 9)
+        col = MODEL_COLORS[mi]
         for fi, feat in enumerate(FEATURE_ORDER):
             rand_val = sub.loc[feat, "rand_r2"]
             loco_val = sub.loc[feat, "loco_r2"]
@@ -151,7 +154,7 @@ def fig2_random_vs_loco(results: pd.DataFrame):
 
     from matplotlib.patches import Patch
     legend_handles = [
-        Patch(facecolor=plt.cm.tab10(i / 9), label=MODEL_LABELS[m])
+        Patch(facecolor=MODEL_COLORS[i], label=MODEL_LABELS[m])
         for i, m in enumerate(MODEL_ORDER)
     ]
     legend_handles += [
@@ -188,25 +191,24 @@ def fig3_country_rmse(country: pd.DataFrame):
     x = np.arange(len(countries))
     width = 0.25
 
-    fig, ax = plt.subplots(figsize=(9, 5))
+    fig, ax = plt.subplots(figsize=(9, 5.2))
+    bars_drawn = {}
     for fi, feat in enumerate(FEATURE_ORDER):
         sub = df[df["feature"] == feat].set_index("country").reindex(countries)
-        ax.bar(x + (fi - 1) * width, sub["rmse"], width,
+        bars = ax.bar(x + (fi - 1) * width, sub["rmse"], width,
                       label=f"{FEAT_LABELS[feat]} ({MODEL_LABELS[sub['model'].iloc[0]]})",
-                      color=PALETTE[feat], alpha=0.85)
+                      color=PALETTE[feat], alpha=0.9, edgecolor="white", linewidth=0.4)
+        bars_drawn[feat] = (bars, sub)
 
-    # n_test labels above each country group (once, centred)
     n_test_by_country = df.groupby("country")["n_test"].first()
-    for ci, ctry in enumerate(countries):
-        n = n_test_by_country[ctry]
-        ax.text(x[ci], ax.get_ylim()[1] if ax.get_ylim()[1] > 0 else 3200,
-                f"n={n}", ha="center", va="bottom", fontsize=8, color="black")
-
+    xlabels = [f"{c}\nn={n_test_by_country[c]:,}" for c in countries]
     ax.set_xticks(x)
-    ax.set_xticklabels(countries, fontsize=10)
+    ax.set_xticklabels(xlabels, fontsize=10)
     ax.set_ylabel("RMSE (kg/ha)", fontsize=11)
-    ax.set_title("Per-Country RMSE under LOCO CV\n(best model per feature set)", fontsize=11)
-    ax.legend(fontsize=9)
+    ax.set_title("Per-Country LOCO RMSE  (best model per feature set)", fontsize=11, pad=10)
+    ax.legend(fontsize=9, framealpha=0.9)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
     plt.tight_layout()
     out = FIGS / "fig3_loco_country_rmse.pdf"
     fig.savefig(out, dpi=200, bbox_inches="tight")
@@ -232,7 +234,7 @@ def fig4_generalization_gap(results: pd.DataFrame):
         sub = df[df["model"] == model].set_index("feature").reindex(FEATURE_ORDER)
         ax.bar(x + (mi - 1) * width, sub["gap"], width,
                label=MODEL_LABELS[model],
-               color=plt.cm.tab10(mi / 9), alpha=0.85)
+               color=MODEL_COLORS[mi], alpha=0.85)
 
     ax.set_xticks(x)
     ax.set_xticklabels([FEAT_LABELS[f] for f in FEATURE_ORDER], fontsize=11)
@@ -380,6 +382,181 @@ def fig6_pred_vs_actual(master: pd.DataFrame, target: str):
 
 
 # ---------------------------------------------------------------------------
+# Fig 7 — KL divergence heatmap (pairwise, log-yield)
+# ---------------------------------------------------------------------------
+
+def fig7_kl_heatmap():
+    kl_path = PROCESSED / "label_shift_kl.csv"
+    if not kl_path.exists():
+        print("label_shift_kl.csv not found — run scripts/04b_sensitivity.py first")
+        return
+    kl = pd.read_csv(kl_path)
+    pivot = kl.pivot(index="src", columns="tgt", values="kl")
+    # fill diagonal with 0
+    for c in pivot.index:
+        if c in pivot.columns:
+            pivot.loc[c, c] = 0.0
+    countries = sorted(pivot.index)
+    pivot = pivot.reindex(index=countries, columns=countries)
+
+    fig, ax = plt.subplots(figsize=(5.5, 4.5))
+    mask = pivot.isna()
+    sns.heatmap(
+        pivot, annot=True, fmt=".2f", cmap="YlOrRd",
+        linewidths=0.5, ax=ax, mask=mask,
+        annot_kws={"size": 10},
+    )
+    ax.set_title("Pairwise KL Divergence of Log-Yield Distributions\nKL(row ‖ col)", fontsize=11)
+    ax.set_xlabel("Target Country", fontsize=10)
+    ax.set_ylabel("Source Country", fontsize=10)
+    ax.tick_params(axis="x", rotation=30)
+    ax.tick_params(axis="y", rotation=0)
+    plt.tight_layout()
+    out = FIGS / "fig7_kl_divergence.pdf"
+    fig.savefig(out, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved {out}")
+
+
+# ---------------------------------------------------------------------------
+# Fig 8 — Per-fold R² mean ± std error bars
+# ---------------------------------------------------------------------------
+
+def fig8_fold_errorbars():
+    fold_path = PROCESSED / "results_loco_fold_std.csv"
+    if not fold_path.exists():
+        print("results_loco_fold_std.csv not found — run scripts/04b_sensitivity.py first")
+        return
+    fold = pd.read_csv(fold_path)
+
+    x = np.arange(len(FEATURE_ORDER))
+    width = 0.22
+
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    for mi, model in enumerate(MODEL_ORDER):
+        sub = fold[fold["model"] == model].set_index("feature").reindex(FEATURE_ORDER)
+        means = sub["mean"].values
+        stds  = sub["std"].values
+        col = MODEL_COLORS[mi]
+        ax.bar(x + (mi - 1) * width, means, width,
+               yerr=stds, capsize=4,
+               label=MODEL_LABELS[model], color=col, alpha=0.85,
+               error_kw={"elinewidth": 1.2, "ecolor": "black"})
+
+    ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
+    ax.set_xticks(x)
+    ax.set_xticklabels([FEAT_LABELS[f] for f in FEATURE_ORDER], fontsize=11)
+    ax.set_ylabel("R² (mean ± std across LOCO folds)", fontsize=10)
+    ax.set_title("Per-Fold R² Variability — Conditions Not Statistically Separable", fontsize=11)
+    ax.legend(fontsize=9)
+    plt.tight_layout()
+    out = FIGS / "fig8_fold_r2_errorbars.pdf"
+    fig.savefig(out, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved {out}")
+
+
+# ---------------------------------------------------------------------------
+# Fig 9 — NDVI-only ablation vs all feature sets (LOCO R²)
+# ---------------------------------------------------------------------------
+
+def fig9_ndvi_ablation(results: pd.DataFrame):
+    ndvi_path = PROCESSED / "results_ndvi_only.csv"
+    if not ndvi_path.exists():
+        print("results_ndvi_only.csv not found — run scripts/04b_sensitivity.py first")
+        return
+    ndvi = pd.read_csv(ndvi_path)
+
+    # build combined table: ndvi_only + spectral + prithvi + vit (LOCO)
+    loco = results[results["cv"] == "loco"][["feature", "model", "r2"]].copy()
+    ndvi_rows = ndvi[["model", "r2"]].copy()
+    ndvi_rows["feature"] = "ndvi_only"
+    combined = pd.concat([loco, ndvi_rows[["feature", "model", "r2"]]], ignore_index=True)
+
+    feat_order = ["ndvi_only", "spectral", "prithvi", "vit"]
+    feat_labels = {
+        "ndvi_only": "NDVI\nOnly",
+        "spectral":  "Spectral\n(10-band)",
+        "prithvi":   "Prithvi-EO\n(768-dim)",
+        "vit":       "ViT-Base\n(768-dim)",
+    }
+    x = np.arange(len(feat_order))
+    width = 0.22
+
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    for mi, model in enumerate(MODEL_ORDER):
+        sub = combined[combined["model"] == model].set_index("feature").reindex(feat_order)
+        col = MODEL_COLORS[mi]
+        ax.bar(x + (mi - 1) * width, sub["r2"], width,
+               label=MODEL_LABELS[model], color=col, alpha=0.85)
+
+    ax.axhline(0, color="black", linewidth=0.9, linestyle="--")
+    ax.set_xticks(x)
+    ax.set_xticklabels([feat_labels[f] for f in feat_order], fontsize=10)
+    ax.set_ylabel("LOCO R²", fontsize=11)
+    ax.set_title("Feature Ablation: NDVI-Only vs Spectral vs Foundation Embeddings\n"
+                 "(all conditions negative — richer features do not improve cross-country generalisation)",
+                 fontsize=10)
+    ax.legend(fontsize=9)
+    plt.tight_layout()
+    out = FIGS / "fig9_ndvi_ablation.pdf"
+    fig.savefig(out, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved {out}")
+
+
+# ---------------------------------------------------------------------------
+# Fig 10 — Yield distribution violin per country (label shift visual)
+# ---------------------------------------------------------------------------
+
+def fig10_yield_distributions(master: pd.DataFrame):
+    countries = ["Kenya", "Malawi", "Nigeria", "Rwanda", "Tanzania"]
+    data = master[master["country"].isin(countries)][["country", "yield_kgha"]].dropna()
+    pooled_mean = data["yield_kgha"].mean()
+
+    fig, ax = plt.subplots(figsize=(9, 5.5))
+    parts = ax.violinplot(
+        [data[data["country"] == c]["yield_kgha"].values for c in countries],
+        positions=range(len(countries)),
+        showmedians=True,
+        showextrema=False,   # suppress whiskers — cleaner
+        widths=0.7,
+    )
+
+    colors = [COUNTRY_COLORS[c] for c in countries]
+    for body, col in zip(parts["bodies"], colors):
+        body.set_facecolor(col)
+        body.set_alpha(0.80)
+        body.set_edgecolor("white")
+        body.set_linewidth(0.8)
+    parts["cmedians"].set_color("white")
+    parts["cmedians"].set_linewidth(2)
+
+    ax.axhline(pooled_mean, color="#444444", linewidth=1.2,
+               linestyle="--", label=f"Pooled mean  {pooled_mean:.0f} kg/ha", zorder=3)
+
+    # stats table as x-tick labels: "Country\nn=X  μ=Y"
+    xlabels = []
+    for c in countries:
+        vals = data[data["country"] == c]["yield_kgha"]
+        xlabels.append(f"{c}\nn={len(vals):,}   μ={vals.mean():.0f}")
+
+    ax.set_xticks(range(len(countries)))
+    ax.set_xticklabels(xlabels, fontsize=9.5)
+    ax.set_ylabel("Yield (kg/ha)", fontsize=11)
+    ax.set_title("Yield Distributions per Country — Label Shift Across LOCO Folds",
+                 fontsize=11, pad=10)
+    ax.legend(fontsize=9, framealpha=0.9)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    plt.tight_layout()
+    out = FIGS / "fig10_yield_distributions.pdf"
+    fig.savefig(out, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved {out}")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -399,6 +576,11 @@ def main():
 
     fig5_naive_baseline(country, naive)
     fig6_pred_vs_actual(master, target)
+
+    fig7_kl_heatmap()
+    fig8_fold_errorbars()
+    fig9_ndvi_ablation(results)
+    fig10_yield_distributions(master)
 
     print(f"\nAll figures saved to {FIGS}/")
     print("Pipeline complete.")

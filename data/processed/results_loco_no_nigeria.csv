@@ -1,0 +1,4 @@
+feature,model,cv,rmse,mae,r2
+spectral,ridge,loco_no_nigeria,2016.8348,1620.4941,-0.2783
+spectral,rf,loco_no_nigeria,1917.669,1561.9509,-0.1557
+spectral,xgb,loco_no_nigeria,1903.5858,1543.8008,-0.1388
