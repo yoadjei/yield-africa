@@ -1,0 +1,63 @@
+# python environment
+env/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# large data files — download via pipeline (see README)
+data/raw/s2_patches/
+data/raw/*.zip
+data/raw/grow_africa_raw.parquet
+data/raw/grow_africa_sampled.parquet
+data/raw/grow_africa_final.parquet
+data/raw/hvstat_africa_boundary_v1.0.gpkg
+data/raw/hvstat_africa_data_v1.0.csv
+data/raw/harveststat_raw.csv
+data/raw/export_log.csv
+data/raw/missing_patches.txt
+
+# large processed files — reproduced by running the pipeline
+data/processed/master_dataset.parquet
+data/processed/embeddings_prithvi.parquet
+data/processed/embeddings_vit.parquet
+data/processed/dataset_summary.csv
+data/embeddings/
+
+# model weights — download via HuggingFace (see README)
+models/
+
+# jupyter
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# latex build artifacts
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.bbl
+paper/*.blg
+paper/*.fls
+paper/*.fdb_latexmk
+paper/*.synctex.gz
+
+# keep tracked:
+# data/processed/results_all.csv
+# data/processed/results_loco_country.csv
+# figures/*.pdf
+# paper/main.tex
+# paper/references.bib
