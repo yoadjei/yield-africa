@@ -216,7 +216,7 @@ The following files are tracked in git and allow figure reproduction without re-
   author  = {Adjei, Yaw Osei},
   title   = {Do Foundation Model Embeddings Improve Cross-Country Crop Yield Generalisation?
              A Leave-One-Country-Out Evaluation in Sub-Saharan Africa},
-  year    = {2025},
+  year    = {2026},
   journal = {under review}
 }
 ```
